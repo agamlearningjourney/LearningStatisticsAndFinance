@@ -1,5 +1,5 @@
 ---
-title: "PCA on yield curve"
+title: ""
 output: 
   html_document: 
     number_sections: yes
@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
 # Some stylized facts
 
 - volatility clustering
-- fat tails
+- thick tails
 - high cross-correlation during crisis
 - selection bias of active management
 - anomaly: size, value, asset growth, profitability, momentum, low volatility anomaly
