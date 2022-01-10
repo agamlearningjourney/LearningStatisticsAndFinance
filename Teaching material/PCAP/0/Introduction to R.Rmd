@@ -1,0 +1,379 @@
+---
+title: "Introduction to R"
+author: Hendro Sugandi
+output:
+  pdf_document: 
+    number_sections: yes
+    toc: yes
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Packages
+
+```{r, message=F, warning=F}
+# see loaded packages
+(.packages())
+
+# # see (the first 10) function within stats package
+# ls("package:stats")[1:10]
+
+# # ?, help() operator, access to the documentation pages for R functions, 
+# # data sets, and other objects
+# ?acf
+
+# Download and install packages 
+# install.packages('tidyverse')
+
+# load and attach add-on packages
+library(tidyverse)
+
+# ?group_by
+# ?library
+# or use function: help()
+
+```
+
+# Data type
+
+```{r}
+# vector
+vec_num = c(1,2,3,4) #numeric
+class(vec_num)
+vec_num = 1:3 #integer
+class(vec_num)
+vec_char = c("a","b","c") # character
+class(vec_char)
+
+# matrix
+matrix_a = matrix(1:9, nrow = 3, ncol = 3, byrow = TRUE) 
+class(matrix_a)
+
+# data frame
+df_a = data.frame(id1 = c(111,222,333), 
+                  id2 = c("a", "b", "c"), 
+                  age = c(20,30,40))
+View(df_a)
+class(df_a)
+
+# select or remove 
+df_a[2:3,] # select only the second and third rows
+df_a[-c(1),] # exclude the first row
+df_a[, 1] # select the first column
+
+# list
+list_a = list(vec_num = vec_num, vec_char, matrix_a, df_a)
+View(list_a)
+class(list_a)
+list_a$vec_num
+list_a[[1]] # member reference
+list_a[1] # list slice
+
+class(list_a[[1]] )
+class(list_a[1]) 
+
+# or use function: str(), to check data structure
+str(list_a)
+
+```
+
+# Code Snippets
+
+Used for quickly inserting common snippets of code, for example:
+
+- fun (function)
+- mat (matrix)
+- if, el, and ei (conditional expressions)
+- for (for loop)
+
+```{r}
+# code snippets example: typing "for", then press tab
+# for (variable in vector) {
+#   
+# }
+
+```
+
+
+# Load and save
+
+```{r}
+# check current working directory
+# getwd()
+
+# set working directory using the following function
+# setwd(dir) # e.g. "C:/Users/.../"
+
+# read csv
+FF5 <- read.csv(file = "F-F_Research_Data_5_Factors_2x3.csv")
+# FF5 <- read.csv(file = "C:/Users/.../F-F_Research_Data_5_Factors_2x3.csv")
+# OR
+# FF5 <- read.csv(file = "C:\\Users\\...\\F-F_Research_Data_5_Factors_2x3.csv")
+
+# save data to RData format
+save(FF5, file = "FF5.RData")
+
+# save data to csv format
+write.csv(FF5, file = "FF5.csv")
+
+# remove the data
+rm(FF5)
+
+# load RData
+load("FF5.RData")
+
+```
+
+# Vector and matrix
+
+$$X = \begin{bmatrix}
+x_{11} & x_{12} & x_{13}\\
+x_{21} & x_{22} & x_{23}
+\end{bmatrix}$$
+
+```{r}
+# create vector and matrix
+vec1 <- matrix(c(10, 20), nrow = 2, ncol = 1)
+vec2 <- c(10,20)
+mat1 <- matrix(c(10, 20, 30, 40, 50, 60), nrow = 2) # default: byrow = FALSE
+mat2 <- matrix(c(10, 20, 30, 40, 50, 60), nrow = 2, byrow = TRUE) 
+
+# check the data dimension
+dim(vec1)
+dim(vec2)
+length(vec2)
+dim(mat2)
+
+# transpose
+t(vec1)
+t(vec2)
+class(vec2); class(t(vec2))
+t(mat2)
+
+# add
+vec1+vec2
+mat1+mat2
+
+# multiplication with constant
+2*vec1
+2*mat2
+
+# matrix multiplication
+vec2 %*% t(vec2)
+vec1 %*% t(vec1)
+t(vec1) %*% mat1
+mat1 %*% t(mat2)
+t(mat1) %*% mat2
+
+# element wise multiplication
+mat1 * mat1
+
+```
+
+$$x^t Y x = \begin{bmatrix}
+x_{1} & x_{2} 
+\end{bmatrix} 
+\begin{bmatrix}
+y_{11} & y_{12} \\
+y_{21} & y_{22} 
+\end{bmatrix}
+\begin{bmatrix}
+x_{1} \\
+x_{2}  
+\end{bmatrix}$$
+
+```{r}
+# FF5 returns are in percentage
+FF5 <- read.csv(file = "F-F_Research_Data_5_Factors_2x3.csv")
+x_vec <- matrix(c(0.2, 0.8), nrow = 2) 
+sigma_mat <- cov(FF5 %>% select(SMB, HML)) # using dplyr
+sigma_mat2 <- cov(FF5[, c(3,4)] )
+
+# variance of portfolio
+t(x_vec) %*% sigma_mat %*% x_vec
+var(FF5$SMB*0.2+FF5$HML*0.8)
+
+
+```
+
+Inverse
+
+```{r}
+solve(sigma_mat)
+round(solve(sigma_mat) %*% sigma_mat, 2) # identity matrix
+
+```
+
+
+# Example 1: summary statistics, function, and plot
+
+- Load and check data
+- Calculate summary statistics
+- Create function
+- Create plot
+
+```{r}
+# read data
+FF5 <- read.csv(file = "F-F_Research_Data_5_Factors_2x3.csv")
+# check first n row 
+head(FF5)
+head(FF5, n = 10)
+tail(FF5)
+colnames(FF5)
+dim(FF5); nrow(FF5); ncol(FF5)
+
+# check data structure 
+str(FF5)
+# summary statistics
+summary(FF5)
+
+# change returns from % to actual
+FF5 <- FF5[,c(2:7)]/100
+
+# ways of calculating mean of each column
+colMeans(FF5)
+sapply(FF5, mean)
+apply(FF5, MARGIN = 2, FUN = mean)
+c(mean(FF5$Mkt.RF), mean(FF5$SMB), mean(FF5$HML), 
+  mean(FF5$RMW) , mean(FF5$CMA), mean(FF5$RF))
+c(mean(FF5[,1]), mean(FF5[,2]), mean(FF5[,3]), 
+  mean(FF5[,4]), mean(FF5[,5]), mean(FF5[,6]))
+
+# using dplyr
+FF5 %>%
+  summarise_all(.funs = ~ mean(.))
+
+# covariance and correlation
+round(cov(FF5), 6)
+round(cor(FF5), 2)
+cor(FF5$Mkt.RF, FF5$SMB)
+
+
+```
+
+Make average function
+
+```{r}
+f_average <- function(x) {
+  N <- length(x)
+  average <- sum(x)/N
+  return(average)
+}
+
+sapply(FF5, f_average)
+f_average(x = FF5$Mkt.RF)
+
+```
+
+
+Using dplyr to calculate yearly average of monthly returns 
+
+```{r}
+FF5 <- read.csv(file = "F-F_Research_Data_5_Factors_2x3.csv")
+
+library(lubridate) # for ymd function
+
+FF5 <- FF5 %>%
+  # change returns from % to actual
+  mutate_at(.vars = vars(Mkt.RF:RF),
+            .funs = list( ~ . /100) ) %>%
+  # make new variables of date_format and date_year
+  mutate(date_format = ymd(paste0(date, "01")),
+         date_year = year(date_format)) 
+
+# FF5_sum: FF5 summary
+FF5_sum <- FF5 %>%
+  # calculate average monthly returns for each year
+  group_by(date_year) %>%
+  summarise_at(.vars = vars(Mkt.RF:RF),
+               .funs = list( ~ mean(.))) %>%
+  ungroup()
+
+# plot SMB and HML, average monthly returns for each year  
+plot(x = FF5_sum$date_year, y = FF5_sum$SMB, type = "l", 
+     col = "red", xlab = "date", ylab = "return") 
+lines(x = FF5_sum$date_year, y = FF5_sum$HML, col = "blue") 
+legend("bottomleft", legend=c("SMB", "HML"),
+       col=c("red", "blue"), lty = 1, cex = 0.7)
+
+# plot SMB and HML, monthly returns
+plot(x = FF5$date_format, y = FF5$SMB, type = "l", 
+     col = "red", xlab = "date", ylab = "return")
+lines(x = FF5$date_format, y = FF5$HML, col = "blue") 
+legend("bottomleft", legend=c("SMB", "HML"),
+       col=c("red", "blue"), lty = 1, cex = 0.7)
+
+
+```
+
+
+
+# Example 2: regression and for loop
+
+- Simulate data
+- Run regressions
+- Find the true relationship between Y and X
+
+```{r}
+set.seed(1) # for replication
+
+N_obs = 1000
+
+# generate random numbers for X
+df_regression <- data.frame(
+  #Random number UNIForm
+  X1 = runif(n = N_obs, min = -5, max = 10) ,
+  #Random number NORMal
+  X2 = rnorm(n = N_obs, mean = 3, sd = 5), 
+  X3 = rexp(n = N_obs, rate = 1),  
+  X4 = rbinom(n = N_obs, size = 10, prob = 0.3),
+  X5 = rpois(n = N_obs, lambda = 3),
+  noise = rnorm(n = N_obs, mean = 0, sd = 1)
+)
+
+# define Y
+df_regression$Y <- 3*df_regression$X1 + df_regression$noise
+
+# prepare data frame to store output of loop 
+df_out <- data.frame(coef = rep(NA, 5),
+                     ts = rep(NA, 5),
+                     R2 = rep(NA, 5))
+
+# run univariate regressions
+for (i in 1:5) {
+  # # run regression at each loop, using X_i
+  # reg_temp <- lm(df_regression$Y ~ df_regression[, i])
+  
+  # alternatively
+  f <- as.formula(paste0("Y ~ X",i))
+  reg_temp <- lm(f, data = df_regression)
+  
+  # store the results
+  df_out[i,] <- c(reg_temp$coefficients[2],
+                  summary(reg_temp)$coefficients[2,3],
+                  summary(reg_temp)$r.squared)
+
+}
+
+round(df_out,2)
+
+
+```
+
+
+# Further readings
+
+- [R for Data Science], free book
+- [RMarkdown], for writing reports and interactive documents
+- [Stackoverflow], question and answer website for programming
+
+
+[R for Data Science]: https://r4ds.had.co.nz/
+[RMarkdown]: https://rmarkdown.rstudio.com/lesson-1.html
+[Stackoverflow]: https://stackoverflow.com/
+
+

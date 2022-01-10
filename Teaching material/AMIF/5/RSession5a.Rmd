@@ -1,0 +1,263 @@
+---
+title: '4329: RSession5a'
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Tree-based methods
+
+- Decision Trees
+- Bagging and random forest 
+- boosting
+
+# Decision trees
+
+## Split into train and test sample
+
+```{r}
+library(MASS)
+library(tree)
+
+set.seed(102)
+# split data into training (70%) and testing (30%)
+train = sample(x = 1:nrow(Boston), size = nrow(Boston)*0.7)
+
+```
+
+
+## Regression trees
+
+```{r}
+# fit a tree
+tree_fit = tree(medv ~ ., Boston, subset = train)
+summary(tree_fit)
+
+```
+
+Some variables are not used in tree construction. In regression problem, deviance is sum of squared error.
+
+Plot the tree.
+
+```{r}
+# See the tree
+tree_fit
+
+# plot the tree
+plot(tree_fit); text(tree_fit)
+
+```
+
+Run cross-validation and pruning. Pruning can reduce the complexity and the variance of tree.  
+
+```{r}
+# 10 folds cross validation
+tree_cv_fit = cv.tree(tree_fit, FUN = prune.tree, K = 10)
+plot(tree_cv_fit)
+
+```
+
+The axis on top of the plot is cost complexity parameter.
+
+```{r}
+# best is number of terminal nodes
+# Since we want to prune the tree, we pick terminal nodes that is less than tree_fit's terminal node
+tree_prune = prune.tree(tree_fit, best = 6)
+plot(tree_prune); text(tree_prune, all = TRUE)
+
+```
+
+
+Interpretation: 5th and 6th terminal node from the left: higher rm correspond to higher price. Average price for $6.97 < rm < 7.44$ and $rm > 7.44$ are 32.33 and 46.11, respectively.
+
+Test performance.
+
+```{r}
+# Unpruned tree test MSE
+mean((Boston[-train,"medv"] - predict(tree_fit, newdata = Boston[-train,]))^2)
+
+# pruned tree test MSE
+mean((Boston[-train,"medv"] - predict(tree_prune, newdata = Boston[-train,]))^2)
+
+```
+
+Plot the $\hat{y}$ and $y$.
+
+```{r}
+y_test = Boston[-train,"medv"]
+
+par(mfrow=c(1,2))
+yhat_test = predict(tree_prune, newdata = Boston[-train,])
+plot(yhat_test, y_test, main = "tree_prune"); abline(0,1, col="blue")
+yhat_test = predict(tree_fit, newdata = Boston[-train,])
+plot(yhat_test, y_test, main = "tree_fit"); abline(0,1, col="blue")
+
+```
+
+
+## Bagging and random forest
+
+### Bagging
+
+Bagging is a special case of random forest where m = p.
+
+- m = number of predictors considered at each split 
+- p = the total number of predictors 
+
+```{r}
+library(randomForest)
+
+# set.seed(100)
+# bagging_fit = randomForest(medv ~ ., data = Boston, 
+#                           subset = train, 
+#                           mtry = 13, 
+#                           importance = TRUE)
+# 
+# bagging_fit
+
+library(dplyr)
+set.seed(100)
+bagging_fit = randomForest(x = Boston[train,] %>% select(-c(medv)),
+                           xtest = Boston[-train,] %>% select(-c(medv)),
+                           y = Boston[train,]$medv,
+                           ytest = Boston[-train,]$medv,
+                           mtry = 13,
+                           importance = TRUE,
+                           keep.forest = TRUE)
+
+```
+
+
+```{r}
+plot(bagging_fit)
+
+x_axis = 1:length(bagging_fit$test$mse)
+plot(x = x_axis, y = bagging_fit$test$mse, type = "l", xlab = "trees")
+
+```
+
+Test performance
+
+```{r}
+yhat_bagging = predict(bagging_fit, newdata = Boston[-train,])
+plot(yhat_bagging, y_test); abline(0,1, col="blue")
+mean((yhat_bagging - y_test)^2)
+
+```
+
+Importance:
+
+```{r}
+importance(bagging_fit)
+varImpPlot(bagging_fit)
+
+```
+
+
+### Random forest
+
+```{r}
+set.seed(100)
+rf_fit = randomForest(medv ~ ., data = Boston,
+                      subset = train,
+                      mtry = 5,
+                      importance = TRUE)
+
+```
+
+Test MSE
+
+```{r}
+yhat_rf = predict(rf_fit, newdata = Boston[-train,])
+mean((yhat_rf - y_test)^2)
+
+```
+
+Importance
+
+```{r}
+importance(rf_fit)
+varImpPlot(rf_fit)
+
+```
+
+tuning mtry
+
+```{r}
+tuneRF(x = Boston[train,] %>% select(-c(medv)),
+       y =  Boston[train,]$medv,
+       ntreeTry = 500,
+       stepFactor = 2,
+       improve = 0.01,
+       mtryStart = 1)
+
+```
+
+
+## Boosting
+
+In Boosting, the trees are grown sequentially
+
+```{r}
+library(gbm)
+set.seed(100)
+
+boost_fit = gbm(medv ~ ., 
+                data = Boston[train,], 
+                distribution = "gaussian", 
+                n.trees = 5000, 
+                interaction.depth = 4)
+
+summary(boost_fit)
+
+```
+
+
+```{r}
+# partial dependence plot
+plot(boost_fit, i = "rm")
+plot(boost_fit, i = "lstat")
+
+```
+
+
+```{r}
+# test error
+yhat_boost = predict(boost_fit, newdata = Boston[-train,],
+                     n.trees=5000)
+
+mean((yhat_boost-y_test)^2)
+
+plot(x = yhat_boost, y = y_test) ; abline(0,1, col="blue")
+
+
+```
+
+With cross validation
+
+```{r}
+set.seed(101)
+boost_cv = gbm(medv ~ .,
+               data = Boston[train,], distribution = "gaussian",
+               n.trees = 1000, interaction.depth = 4,
+               shrinkage = 0.2,verbose = FALSE,
+               cv.folds = 5)
+
+# CV
+best.iter <- gbm.perf(boost_cv, method = "cv")
+gbm.perf(boost_cv, method = "cv")
+
+```
+
+

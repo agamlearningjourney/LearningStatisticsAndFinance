@@ -1,0 +1,198 @@
+---
+title: "PCA on yield curve"
+output: 
+  html_document: 
+    number_sections: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+# About PCA
+
+Principal Component Analysis (PCA) is a technique to summarize a large number of features to some lower dimensional variables that explain the variation of the original data the most. PCA can capture the common component that are reflected in the individual proxies and remove the idiosyncratic noise within each proxy.
+
+# Example of PCA on yield curve
+
+The code below will download or load the data of treasury yield curve.
+
+```{r}
+library(tidyquant) # to use getYieldCurve
+library(lubridate)
+library(tidyverse)
+library(quantmod)
+
+# ##### DOWNLOAD data, or ...
+# ## download: 3,6-Month, 1,5,10-year,  Treasury Constant Maturity Minus Federal Funds Rate
+# df_yield_curve <- tq_get(c("T3MFF", "T6MFF", "T1YFF", "T5YFF", "T10YFF"), 
+#                          get = "economic.data",
+#                          from = "1982-01-01" )
+# 
+# ## save
+# save(df_yield_curve, file = "df_yield_curve.RData" )
+# ##### end
+
+##### LOAD SAVED DATA
+load(file = "df_yield_curve.RData" )
+##### end
+
+
+sapply(df_yield_curve, class)
+unique(df_yield_curve$symbol)
+
+# ## make plot at each year
+# df_plot <- df_yield_curve %>%
+#   ## select date where all data available
+#   group_by(date) %>%
+#   mutate(non_empty = sum(!is.na(price))) %>%
+#   ungroup() %>%
+#   filter(non_empty == 5) %>%
+#   ## select the last date in a year, where all data available
+#   group_by(symbol, year(date)) %>%
+#   filter(row_number() == n()) %>%
+#   ungroup() %>%
+#   filter(
+#     # date == "2021-11-18",
+#     date >= "2010-01-01",
+#     # month(date) == 12,
+#     ) %>%
+#   mutate(
+#     var_order = case_when(
+#       symbol == "T3MFF" ~ 3/12,
+#       symbol == "T6MFF" ~ 6/12,
+#       symbol == "T1YFF" ~ 1,
+#       symbol == "T5YFF" ~ 5,
+#       symbol == "T10YFF" ~ 10,
+#     ))
+
+## make plot at each end of month
+df_plot <- df_yield_curve %>%
+  ## select date where all data available
+  group_by(date) %>%
+  mutate(non_empty = sum(!is.na(price))) %>%
+  ungroup() %>%
+  filter(non_empty == 5) %>%
+  ## select the last date in a year, where all data available
+  group_by(symbol, year(date), month(date)) %>%
+  filter(row_number() == n()) %>%
+  ungroup() %>%
+  ## filter by date
+  filter(
+    # date == "2021-11-18",
+    date >= "2018-01-01",
+    # month(date) == 12,
+    ) %>%
+  mutate(
+    var_order = case_when(
+      symbol == "T3MFF" ~ 3/12,
+      symbol == "T6MFF" ~ 6/12,
+      symbol == "T1YFF" ~ 1,
+      symbol == "T5YFF" ~ 5,
+      symbol == "T10YFF" ~ 10,
+    ))
+
+## plot
+df_plot %>%
+  ggplot(aes(x = var_order, y = price)) +
+  geom_point() +
+  geom_line() +
+  facet_wrap(facets = vars(date))
+
+```
+
+The code below will run PCA on the Treasury yield curve.
+
+```{r}
+df_PCA <- df_yield_curve %>%
+  select(symbol, date, price) %>%
+  spread(key = symbol, value = price) %>%
+  drop_na()
+
+PCA_res <- prcomp(as.matrix(df_PCA %>% select(-c(date)) ),
+       scale. = TRUE)
+
+summary(PCA_res)
+
+# PCA_res$sdev
+PCA_res$rotation
+# PCA_res$center
+# PCA_res$scale
+# PCA_res$x
+# sum(PCA_res$rotation[,1]^2)
+# sum(PCA_res$rotation[,2]^2)
+
+
+```
+
+- PC1 is related to general economy risk, all have the same direction. This reflects the shift in overall yield curve.
+- PC2 related to the spread of short vs long term, i.e. long term = 10Y and 5Y, Short term = 1Y,6M,3M.
+- The two PCs covers 94% variation of the data.
+
+```{r}
+# plot(PCA_res)
+
+df_plot <- tibble(
+  PC = 1:5,
+  # var = PCA_res$sdev^2/sum(PCA_res$sdev^2),
+  var = PCA_res$sdev^2,
+)
+
+df_plot <- df_plot %>%
+  mutate(cumsumvar = cumsum(var))
+
+df_plot %>%
+  ggplot(aes(x = PC, y = var)) +
+  geom_bar(stat="identity", fill="steelblue")+
+  theme_minimal()
+
+```
+
+
+- One advantage of PCA is "mutually exclusive". PC1 and PC2 are uncorrelated.
+
+```{r}
+round(cor(PCA_res$x),2)
+
+```
+
+
+# Example of PCA on simulated data of yield curve
+
+The example in previous section shows that the data generating process of yield curve has two main component. The first component is related to the general shift, i.e. upward or downward shift, of yield curve. The second component is the difference between short and long term rate. Most of the time, all else equal, longer maturity assets have higher risk and rate. However, during recession, short term uncertainty increases, while in the long term there are higher chance that the uncertainty will be resolved. Thus, when the market expects that there is upcoming recessions, the yield curve may be inverted.   
+
+The code below suggest that the data generation process of the yield curve are driven by PC1 and PC2.
+
+```{r}
+## generate unobservable data
+set.seed(1)
+# Y is unobservable matrix, contains PC1 and PC2
+Y1 <- rnorm(n = nrow(df_PCA), mean = 0, sd = 2)
+Y2 <- rnorm(n = nrow(df_PCA), mean = 0, sd = 1)
+
+Y <- as.matrix(data.frame(Y1, Y2))
+
+# Tmat is transformation matrix. Transform Y into X, where X is observed data.
+# Tmat <- t(PCA_res$rotation[,1:2])
+Tmat <- matrix(data = c(0.4, 0.4, 0.4, 0.4, 0.4, 
+                        0.5, 0.4, 0.1, -0.5, -0.6),
+               nrow = 2,
+               ncol = 5,
+               byrow = TRUE)
+
+colnames(Tmat) <- c("0.25", "0.5", "1", "5", "10")
+rownames(Tmat) <- c("PC1", "PC2")
+
+# X is observed data. X is a function of Y.
+X <- Y %*% Tmat
+
+# Run PCA
+df_check <- prcomp(X)
+df_check$sdev
+summary(df_check)
+
+```
+
+

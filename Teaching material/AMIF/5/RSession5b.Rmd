@@ -1,0 +1,211 @@
+---
+title: '4329: RSession5b'
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Classification using tree based methods 
+
+## Load library
+
+```{r}
+library(tree)
+library (ISLR)
+library(dplyr)
+library(conflicted)
+
+
+```
+
+## Prepare data
+
+```{r}
+attach(Carseats)
+
+## make high sales as factor
+Carseats_df <- Carseats %>%
+  mutate(High = as.factor(ifelse(Sales <= 8, "No", "Yes")) ) %>%
+  # remove sales
+  select(-Sales)
+
+set.seed(2)
+train = sample(1:nrow(Carseats_df), size = nrow(Carseats_df)*70/100)
+
+```
+
+## Classification trees
+
+```{r}
+# fit a tree
+tree_fit = tree(High ~ ., Carseats_df, subset = train)
+
+summary(tree_fit)
+
+```
+
+Plot the tree.
+
+```{r}
+# See the tree
+tree_fit
+# plot the tree
+plot(tree_fit); text(tree_fit)
+
+```
+
+
+```{r}
+# 10 folds cross validation
+set.seed(10)
+tree_cv_fit = cv.tree(tree_fit, FUN = prune.misclass, K = 10)
+plot(tree_cv_fit)
+
+```
+
+
+```{r}
+tree_prune = prune.tree(tree_fit, best = 10)
+plot(tree_prune); text(tree_prune, all = TRUE)
+
+```
+
+Test performance
+
+```{r}
+# Unpruned tree test MSE
+tree_pred = predict(tree_fit, newdata =  Carseats_df[-train,], type = "class")
+y_test = Carseats_df$High[-train]
+table(tree_pred, y_test)
+
+# Pruned tree test MSE
+tree_pred = predict(tree_prune, newdata =  Carseats_df[-train,], type = "class")
+y_test = Carseats_df$High[-train]
+
+table(tree_pred, y_test)
+
+```
+
+
+## Bagging and random forest
+
+### Bagging
+
+```{r}
+library(randomForest)
+set.seed(100)
+bagging_fit = randomForest(High ~ ., data = Carseats_df, 
+                          subset = train, 
+                          mtry = ncol(Carseats_df)-1, 
+                          importance = TRUE)
+
+bagging_fit
+
+```
+
+```{r}
+bagging_pred = predict(bagging_fit, 
+                  newdata =  Carseats_df[-train,], 
+                  type = "response")
+
+y_test = Carseats_df$High[-train]
+table(bagging_pred, y_test)
+
+```
+
+```{r}
+importance(bagging_fit)
+varImpPlot(bagging_fit)
+
+```
+
+
+## Boosting
+
+
+```{r}
+library(gbm)
+set.seed(100)
+
+# gbm distribution = Bernoulli requires the response to be in {0,1}
+Carseats_df_gbm <- Carseats_df %>% mutate(High = as.numeric(High)-1)
+
+boost_fit = gbm(High ~., 
+                data = Carseats_df_gbm[train,], 
+                distribution = "bernoulli", 
+                n.trees = 5000, 
+                interaction.depth = 4)
+
+summary(boost_fit)
+
+```
+
+
+```{r}
+# partial dependence plot
+plot(boost_fit, i = "Price")
+plot(boost_fit, i = "CompPrice")
+plot(boost_fit, i = "ShelveLoc")
+
+```
+
+
+```{r}
+boosting_pred = predict(boost_fit, 
+                  newdata =  Carseats_df[-train,], 
+                  type = "response")
+
+boosting_pred = ifelse(boosting_pred <= 0.5, 0, 1)
+
+y_test = Carseats_df_gbm$High[-train]
+
+table(boosting_pred, y_test)
+
+
+```
+
+With Cross Validation
+
+```{r}
+set.seed(101)
+boost_cv = gbm(High ~ .,
+               data = Carseats_df_gbm[train,], distribution = "bernoulli",
+               n.trees = 1000, interaction.depth = 4,
+               shrinkage = 0.2,verbose = FALSE,
+                cv.folds = 5)
+
+# Check performance using 5-fold cross-validation
+best.iter <- gbm.perf(boost_cv, method = "cv")
+gbm.perf(boost_cv, method = "cv")
+
+print(best.iter)
+
+which.min(boost_cv$cv.error)
+
+```
+
+```{r}
+boosting_pred = predict(boost_cv, 
+                  newdata =  Carseats_df[-train,], 
+                  n.trees = best.iter,
+                  type = "response")
+
+boosting_pred = ifelse(boosting_pred <= 0.5, 0, 1)
+
+y_test = Carseats_df_gbm$High[-train]
+
+table(boosting_pred, y_test)
+
+```
+

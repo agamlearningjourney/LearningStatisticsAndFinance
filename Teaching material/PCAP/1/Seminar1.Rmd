@@ -1,0 +1,412 @@
+---
+title: "Seminar 1"
+author: Hendro Sugandi
+output:
+  bookdown::pdf_document2: 
+    number_sections: yes
+    toc: yes
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# options(scipen=999)
+options(digits = 5)
+
+```
+
+
+# Plan
+
+This seminar explains some topics that are covered in lecture notes 1, 2 and 3.
+
+- Random variable
+- Descriptive statistics
+- Linear combinations of portfolio weights
+- Sharpe ratio and Mean-Variance
+- Linear algebra
+- Sample estimates
+
+
+# Random variable
+
+- Random variable:
+  - is a function which assigns some quantities to all possible outcomes
+  - For a continuous random variable, there is a continuous probability density which captures the relative likelihood that the value of the random variable would equal the point
+
+Example 1
+
+```{r}
+## Example 1
+## make data frame Example 1 (df_Ex1) 
+## make rA and rB variables for illustration of covariance 
+df_Ex1 <- data.frame(
+  Prob = c(0.25, 0.5, 0.25),
+  rA = c(0.69, 0.03, -0.43),
+  rB = c(-0.06, 0.13, -0.08)
+)
+
+```
+  
+
+
+# Descriptive statistics
+
+## Overview
+
+- Mean
+- Variance, standard deviation
+  - Measure dispersion of a random variable from its mean
+- Covariance, correlation
+  - Measure the co-movement between two random variables
+
+## Mean
+
+Expected return is:
+
+$$\text{E}[r] = \sum_{s=1}^S \pi_s \ r_s$$
+
+Where s is scenario, $p_s$ is probability of each scenario, and $r_s$ is return in each scenario (Lecture 1, page 9).
+
+```{r}
+## E[r] from Example 1
+meanA <- sum(df_Ex1$Prob*df_Ex1$rA)
+meanB <- sum(df_Ex1$Prob*df_Ex1$rB)
+meanA
+meanB
+
+```
+
+
+
+## Variance and standard deviation
+
+$$\text{Var}[r] = \text{E}[(r - \text{E}[r] )^2] = \sum_{s=1}^S \pi_s \ (r_s - \text{E}[r])^2$$
+$$\sigma = \text{SD}(r) = \sqrt{\text{Var}[r]}$$
+Lecture 1, page 10.
+
+Variance also can be defined as
+
+$$\text{Var}[X] = \text{E}[X^2] - \text{E}[X]^2$$
+
+
+```{r}
+## Example 1
+## calculate Var[r]
+varA <- sum(df_Ex1$Prob*(df_Ex1$rA - meanA)^2)
+varB <- sum(df_Ex1$Prob*(df_Ex1$rB - meanB)^2)
+varA
+varB
+## calculate sd[r]
+sqrt(varA)
+sqrt(varB)
+
+```
+
+
+## Covariance and correlation
+
+$$\text{Cov}[X,Y] = \text{E}[XY] - \text{E}[X] \  \text{E}[Y]$$
+
+$$\rho =\text{Cor}[X,Y] = \frac{Cov[X,Y]}{\sigma_X \sigma_Y}$$
+
+```{r}
+## Covariance of rA, rB = covarAB
+meanAB <- sum(df_Ex1$Prob*df_Ex1$rA*df_Ex1$rB)
+meanAB - meanA* meanB
+covarAB <- meanAB - meanA* meanB
+
+## correlation
+covarAB/(sqrt(varA)*sqrt(varB))
+
+
+```
+
+# Linear combinations of portfolio weights
+
+Suppose we want to combine the two stocks as a portfolio. $w_A$ and $w_B$ are portfolio weights on stocks A and B, respectively. 
+
+$$r_p = w_A \ r_A + w_B \ r_B$$
+
+Assume $w_A=0.15$ and $w_B=0.85$
+
+Some properties of expectation and variance: 
+
+$$\text{E}[aX + bY] = a \  \text{E}[X] + b \  \text{E}[Y]$$
+$$\text{Var}[aX+bY] = a^2 \text{Var}[X] + b^2 \text{Var}[Y]+2ab \text{Cov}[X,Y]$$
+See lecture 2, page 33.
+
+```{r}
+## weight
+wA <- 0.15
+wB <- 0.85
+
+## portfolio expected return
+mean_port <- wA*meanA + wB*meanB
+mean_port
+# portfolio variance
+var_port <- wA^2*varA + wB^2*varB + 2*wA*wB*covarAB
+var_port
+# portfolio sd
+sd_port <- sqrt(var_port)
+sd_port
+
+
+```
+
+# Sharpe ratio and mean-variance
+
+## Sharpe ratio
+
+
+$$S_i = \frac{\text{E}[r_i^e]}{\sigma_i}$$
+
+where $\text{E}[r_i^e]$ is expected excess return of an asset. $\text{E}[r_i^e] = \text{E}[r_i] - r_f$. Assume $r_f = 0$, then
+
+
+```{r}
+# Sharpe ratio of A
+(meanA-0)/sqrt(varA)
+
+# Sharpe ratio of B
+(meanB-0)/sqrt(varB)
+
+# Sharpe ratio of portfolio
+(mean_port-0)/sd_port
+
+```
+
+## Mean-variance
+
+```{r}
+N_obs <- 1000
+
+## create data frame
+df_plot <- data.frame(
+  w_1 = seq(from = 0, to = 1, length.out = N_obs)
+)
+# create w_2
+df_plot$w_2 <- 1 - df_plot$w_1
+# calculate portfolio mean and sd for different value of weights
+df_plot$R_mean <- df_plot$w_1 * meanA + df_plot$w_2*meanB
+df_plot$R_var <- df_plot$w_1^2*varA + df_plot$w_2^2*varB + 
+  2*df_plot$w_1*df_plot$w_2*covarAB
+df_plot$R_sd <- sqrt(df_plot$R_var)
+
+## plot expected return and volatility for different value of weights
+plot(x = df_plot$R_sd, y = df_plot$R_mean, type = "l",
+     ylim=c(0.02,0.08), xlab = "Volatility", ylab = "Expected return")
+points(x = sqrt(varA), y = meanA, col = "red")
+points(x = sqrt(varB), y = meanB, col = "blue")
+points(x = sqrt(var_port), y = mean_port, col = "green")
+text(x = c(sqrt(varA), sqrt(varB), sqrt(var_port)), 
+     y = c(meanA, meanB, mean_port)-0.002, 
+     labels = c("A", "B", "P"), cex= 0.7)
+
+
+```
+
+
+
+# Linear algebra 
+
+## General 
+
+$$\mu = \begin{bmatrix}
+E[r_A] \\
+E[r_B]  
+\end{bmatrix}$$
+
+$$\Sigma = \begin{bmatrix}
+Var[r_A] & Cov[r_A,r_B] \\
+Cov[r_A,r_B] & Var[r_B] 
+\end{bmatrix} = \begin{bmatrix}
+\sigma_{r_A}^2 & \sigma_{r_A,r_B} \\
+\sigma_{r_A,r_B} & \sigma_{r_B}^2 
+\end{bmatrix}$$
+
+
+```{r}
+mu_mat <- matrix(c(meanA, meanB), nrow = 2)
+Sigma_mat <- matrix(c(varA, covarAB, covarAB, varB),
+                    byrow = TRUE, nrow = 2)
+
+```
+
+$$\mu^T = \mu' = \begin{bmatrix}
+E[r_A] & E[r_B]  \\
+\end{bmatrix}$$
+
+```{r}
+t(mu_mat)
+
+```
+
+
+## Application on expected return and volatility {#IdLinAl12}
+
+Let $\mathbf{w}$ be a weight matrix:
+
+$$\mathbf{w} = \begin{bmatrix}
+w_A \\
+w_B  
+\end{bmatrix}$$
+
+The expected return of the portfolio is:
+
+$$
+\begin{aligned}
+  \mathbf{w}' \ \mu  &= E[r_p]\\
+  &= E[w_A \ r_A + w_B \ r_B] \\  
+  &= w_A \ E[r_A] + w_B \ E[r_B]\\  
+\end{aligned}
+$$
+
+The portfolio's variance is:
+
+$$
+\begin{aligned}
+  \mathbf{w}'\Sigma \mathbf{w}  &= Var[r_p]\\
+  &= Var[w_A \ r_A + w_B \ r_B] \\  
+  &= w_A^2 \ Var[r_A] + w_B^2 \ Var[r_B] + 2 w_A w_B \sigma_{r_A,r_B}\\  
+\end{aligned}
+$$
+
+See lecture 3, page 27.
+
+```{r}
+w_mat <- c(0.15, 0.85)
+
+## E[rp]
+t(w_mat) %*% mu_mat
+
+## Var[rp]
+t(w_mat) %*% Sigma_mat %*% w_mat
+
+
+```
+
+
+# Sample estimate
+
+
+- Usually, we observe a sample of realized returns for some period of time, $r_1, ..., r_T$. We can estimate the sample mean and standard deviation. 
+- Random variable:
+  - For a continuous random variable, there is a continuous probability density which captures the relative likelihood that the value of the random variable would equal the point. For example, we assume that the stock returns follow a normal distribution.
+
+$$f(r) = \frac{1}{\sqrt{2 \pi} \sigma}\ \exp\Big( -\frac{(r- \mu)^2}{2\sigma^2} \Big)$$  
+
+
+Example 2
+
+```{r}
+
+## Example 2
+## generate random numbers that follow Multivariate Normal Distribution
+## notice that we use mean and sd as inputs for mvrnorm function
+## rA and rB are correlated for illustration
+library(MASS) ## for mvrnorm function
+# define the covariance matrix for simulated data
+Sigma <- matrix(c(7, -3, -3, 4),2,2) / 100
+# simulate multi-variate normal distribution
+set.seed(1) # for replication
+df_Ex2 <- mvrnorm(n = 10000, mu = c(5/100, 3/100), Sigma)
+## change data type from matrix to data frame
+df_Ex2 <- as.data.frame(df_Ex2)
+## assign column names to the data frame
+colnames(df_Ex2) <- c("rA", "rB")
+
+## distribution of return
+hist(df_Ex2$rA, breaks = 10,
+     xlab = "Returns", 
+     ylim = c(0,1.5),
+     main = "Return distribution of simulated data", probability = TRUE)
+
+# Density line
+lines(density(df_Ex2$rA), col = "blue", lwd = 2)
+
+```
+
+
+Sample mean:
+
+$$\bar{r} = \frac{1}{T} \sum_{t=1}^T r_t$$
+
+```{r}
+## sample mean 
+mean(df_Ex2$rA)
+
+```
+
+Sample variance and standard deviation
+
+$$\hat{\sigma}^2 = \frac{1}{T-1} \sum_{t=1}^T(r_t - \bar{r})^2$$
+
+```{r}
+## variance
+var(x = df_Ex2$rA)
+## standard deviation
+sd(x = df_Ex2$rA)
+## equivalently, sd = sqrt(var)
+sqrt(var(x = df_Ex2$rA))
+
+## using the function from Lecture 1 code and data: visualize.R
+# This function returns the unbiased estimator of volatility 
+# Note that this is equivalent to using the function "STEDV.S" in Excel
+vol.s <-function(x){
+        n<-length(as.vector(x))
+        x_bar<-sum(x)/n
+        # note that the sum of squared deviations is divided by (n-1)
+        stdev<-sqrt(sum((x-x_bar)^2)/(n-1))  
+        return(stdev)
+}
+
+## similar result with before
+vol.s(x = df_Ex2$rA)
+
+## using alternative definition, var[x] = E[x^2]-E[x]^2, 
+## notice there are slight differences if we expand the digits
+## due to differences in denominator
+sqrt(mean(df_Ex2$rA^2) - mean(df_Ex2$rA)^2)
+## adjusting for the denominator, we get the same results
+sqrt((mean(df_Ex2$rA^2) - mean(df_Ex2$rA)^2)*nrow(df_Ex2)/(nrow(df_Ex2)-1) )
+
+```
+
+Sample covariance
+
+```{r}
+cov(df_Ex2$rA, df_Ex2$rB)
+
+## to calculate Covariance matrix
+cov(df_Ex2)
+
+```
+
+
+Now we can perform the same matrix operations as in section \@ref(IdLinAl12) to calculate portfolio's mean and volatility, given the portfolio weights.    
+
+# Illustration of covariance
+
+```{r}
+## negative covariance
+plot(x = df_Ex2$rA, y = df_Ex2$rB , xlab = "rA", ylab = "rB" )
+
+## positive covariance
+Sigma <- matrix(c(7, 3, 3, 4),2,2) / 100
+df_Ex2 <- mvrnorm(n = 10000, mu = c(5/100, 3/100), Sigma)
+df_Ex2 <- as.data.frame(df_Ex2)
+colnames(df_Ex2) <- c("rA", "rB")
+plot(x = df_Ex2$rA, y = df_Ex2$rB , xlab = "rA", ylab = "rB" )
+
+## zero covariance
+Sigma <- matrix(c(7, 0, 0, 4),2,2) / 100
+df_Ex2 <- mvrnorm(n = 10000, mu = c(5/100, 3/100), Sigma)
+df_Ex2 <- as.data.frame(df_Ex2)
+colnames(df_Ex2) <- c("rA", "rB")
+plot(x = df_Ex2$rA, y = df_Ex2$rB , xlab = "rA", ylab = "rB" )
+
+
+```
+

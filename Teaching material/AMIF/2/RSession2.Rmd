@@ -1,0 +1,275 @@
+---
+title: '4329: RSession2'
+output:
+  html_document: 
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Long-run relationships in finance and multivariate time series
+
+- Cointegration
+- Vector Error Correction Models
+
+Modeling Volatility
+
+- ARCH, GARCH
+
+
+# Testing for Cointegration
+
+```{r}
+data = read.csv('https://people.orie.cornell.edu/davidr/SDAFE/data/yields2009.csv')
+data = data[, c(3, 4, 5, 6, 7)]
+data = as.ts(data)
+
+plot(data, nc = 2)
+
+```
+
+## Philips-Oularis test: po.test (package tseries)
+
+- Testing for Cointegration in Regression (Lecture 3, p20)
+- The Phillips-Ouliaris test: regress X1 on other variables and perform Phillips-Perron test for the residual.
+- $H_0:$ unit root in cointegrating regression’s residuals, thus the series are not cointegrated. 
+- From the plot, the series follows each other closely and there might be cointegration.
+
+```{r}
+reg <- lm(X3.mo ~ ., data = data)
+plot(reg$residuals, type = "l")
+acf(reg$residuals)
+
+```
+
+- The plot seems stationary, while the ACF is not informative about the stationarity of the series.
+
+```{r, message=F, warning=F}
+library(tseries)
+```
+
+
+```{r}
+po.test(data)
+
+```
+
+- Conclusion: the residuals are stationary and so the series are cointegrated.
+- Implementation note: The unit root is estimated from a regression of the first variable (column) of x on the remaining variables of x without a constant and a linear trend.
+
+## Fit VECM: ca.jo (package urca)
+
+```{r, message=F, warning=F}
+library(urca)
+```
+
+
+```{r}
+vecm = ca.jo(data)
+
+summary(vecm)
+
+```
+
+- conclusion: cannot reject null hypothesis of $r=0$ since test statistics $<$ critical values.
+
+# ARCH and GARCH
+
+Simulate volatility data using GARCH (lecture 4, p19):
+
+$r_t = \phi_0 + \phi_1 r_{t-1} + u_t$ 
+
+$u_t = \epsilon_t \sigma_t$
+
+$\sigma_t^2 = \omega + \alpha u_{t-1}^2 + \beta \sigma_{t-1}^2$
+
+$\epsilon \sim N(0,1)$
+
+```{r}
+# N = 2000
+N = 100000
+set.seed(123)
+e = rnorm(N)
+u = matrix(1, nrow = N)
+r = matrix(0, nrow = N)
+sigma2 = matrix(1, nrow = N)
+
+for (t in 1:(N-1)) {
+    u[t] = e[t] * sqrt(sigma2[t])
+    sigma2[t+1] = 0.03 + 0.2*u[t]^2 + 0.8*sigma2[t]
+    r[t+1] = 0.01 + 0.1*r[t] + u[t]
+}
+
+
+plot.ts(data.frame(sigma2, r))
+
+Box.test(u^2, lag = 5, type = 'Ljung-Box')
+
+```
+
+## plot the simulated data
+
+
+```{r}
+par(mfrow=c(2,2))
+plot(e[(N-200):N], type="l", xlab="t", ylab=expression(epsilon), main = "epsilon")
+plot(sqrt(sigma2[(N-200):N]), type="l", xlab="t", ylab=expression(sigma[t]), main = "sigma_t")
+plot(u[(N-200):N], type="l", xlab="t", ylab="u", main = "u")
+plot(r[(N-200):N], type="l", xlab="t", ylab="r",main = "r")
+
+par(mfrow=c(2,2))
+acf(u, main = "u", lag.max = 20)
+acf(u^2,  main = "u^2", lag.max = 20)
+acf(r, main = "r", lag.max = 20)
+acf(r^2, main = "r^2", lag.max = 20)
+
+```
+
+
+## Fit ARCH(1): ugarchfit (package rugarch)
+
+```{r, message=F, warning=F}
+library(rugarch)
+```
+
+
+```{r}
+# variance.model = list(model = "sGARCH"), sGARCH is vanilla GARCH and is the default.
+spec = ugarchspec(
+    mean.model = list(armaOrder = c(0, 0)),
+    variance.model = list(garchOrder = c(1, 0))
+)
+
+model = ugarchfit(spec, r)
+coef(model)
+
+```
+
+## Fit GARCH(1,1): ugarchfit (package rugarch)
+
+```{r}
+spec = ugarchspec(
+    mean.model = list(armaOrder = c(0, 0)),
+    variance.model = list(garchOrder = c(1, 1))
+)
+
+model = ugarchfit(spec, r)
+coef(model)
+
+```
+
+## Fit ARMA(1,0) + GARCH(1,1): ugarchfit (package rugarch)
+
+
+```{r}
+spec = ugarchspec(
+    mean.model = list(armaOrder = c(1, 0)),
+    variance.model = list(garchOrder = c(1, 1))
+)
+
+model = ugarchfit(spec, r)
+coef(model)
+
+# Intercept (Phi_0) of AR1
+(1-coef(model)["ar1"])*coef(model)["mu"]
+
+show(model)
+
+```
+
+The estimated model is very similar with our simulation (N = 100000):
+
+$r_t = 0.0129 + 0.0964 r_{t-1} + u_t$ 
+
+$u_t = \epsilon_t \sigma_t$
+
+$\sigma_t^2 = 0.0307 + 0.2021 u_{t-1}^2 + 0.7969 \sigma_{t-1}^2$
+
+$\epsilon \sim N(0,1)$
+
+Note: $\mu$ from rugarch is $\Phi(L) (1-L)^d (y_t - \mu_t) = \Theta(L) \epsilon_t$.
+
+
+## Find the optimal GARCH(p,q)
+
+Say you have already found the optimal ARIMA part (for example ARIMA(1, 0), for the GARCH part, try out different specifications, with for example a loop.
+
+For example, to try out all combinations of p and q up to 2:
+
+```{r}
+pq = expand.grid(p=1:2, q=1:2) # Returns the cartesian product of the two vectors
+pq
+
+# get the AIC with inforcriteria() (returns a vector, first element: AIC, second: BIC)
+AICs = matrix(0, nrow = nrow(pq), ncol = 3)
+colnames(AICs) = c('AIC', 'p', 'q')
+for (row in 1:nrow(pq)) {
+    p = pq[row, 1]
+    q = pq[row, 2]
+    spec = ugarchspec(
+    mean.model = list(armaOrder = c(1, 0)),# The optimal ARMA order, found with for ex. auto.arima
+    variance.model = list(garchOrder = c(p, q))
+    )
+    
+    model = ugarchfit(spec, r)
+    AICs[row, ] = c(infocriteria(model)[1], p, q) # infocriteria(model)[1]: The AIC of the fitted model
+}   
+AICs
+
+min = min(AICs[, 'AIC'])
+min
+
+# The p and q
+AICs[AICs[, 'AIC'] == min]
+```
+
+- So the final model found (by AIC) was: ARMA(1, 0) + GARCH(1, 1)
+- note: ugarchfit finds the parameters with a numerical optimization procedure, where some element of chance may enter, like the initalization of parameters (starting values), and machine specific tolerance criteria (for example, .Machine$double.eps), that may vary between for example Mac and Windows computers. For a high dimensional model, the procedure is minimizing a high dimensional loss function, and may reach slightly different local optima depending on which computer you run the same code on.
+
+
+## plot the residual of optimal model
+
+```{r}
+par(mfrow=c(2,2))
+plot(residuals(model, standardize=FALSE)[1:300])
+plot(residuals(model, standardize=TRUE)[1:300])
+plot(residuals(model, standardize=FALSE)[1:300]^2)
+plot(residuals(model, standardize=TRUE)[1:300]^2)
+
+```
+
+- Standardized residual = residuals(model, standardize=FALSE) / sigma(model)
+- The standardized residual seems free from autocorrelation, like white noise (test with Ljung-Box (this output is printed by ugarch), can look at ACF as well)
+
+
+## Fit iGARCH(1,1): ugarchfit (package rugarch)
+
+```{r}
+spec = ugarchspec(
+    mean.model = list(armaOrder = c(0, 0)),
+    variance.model = list(garchOrder = c(1, 1), model='iGARCH')
+)
+
+imodel = ugarchfit(spec, r)
+coef(imodel)
+
+```
+
+
+
+  
+  
+  
+  
+
+
+

@@ -1,0 +1,111 @@
+---
+title: '4329: RSession4b, Classification'
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Classification using glmnet 
+
+## Load library
+
+```{r}
+library(glmnet)
+library (ISLR)
+library(tidyverse)
+library(conflicted)
+
+
+```
+
+## Prepare data
+
+```{r}
+attach(Carseats)
+
+# make high sales as factor
+Carseats_df <- Carseats %>%
+  mutate(High = as.factor(ifelse(Sales <=8," No"," Yes ")) ) %>%
+  # remove sales
+  select(-Sales)
+
+# check format
+sapply(Carseats_df, class)
+
+# check empty
+Carseats_df %>% 
+  summarise_all(~ sum(is.na(.)))
+
+# Drop missing observations first
+Carseats_df <- Carseats_df %>% drop_na()
+# make X matrix
+x_features <- model.matrix(High ~ ., data = Carseats_df)[, -1]
+
+set.seed(2)
+train = sample(1:nrow(x_features), size = nrow(x_features)*70/100)
+
+```
+
+## Fit model
+
+```{r}
+set.seed(1)
+
+cvfit_glmnet = cv.glmnet(x = x_features[train,], y = Carseats_df$High[train], family = "binomial", type.measure = "deviance")
+
+plot(cvfit_glmnet)
+
+coef(cvfit_glmnet, s = "lambda.min")
+coef(cvfit_glmnet, s = "lambda.1se")
+
+set.seed(1)
+fit_bestcv <- glmnet(x = x_features[train,], y = Carseats_df$High[train], family = "binomial", 
+                     lambda = cvfit_glmnet$lambda.1se)
+
+```
+
+## Predicted vs actual
+
+```{r}
+df_pred_train <- data.frame(actual = Carseats_df$High[train],
+           predicted = as.numeric(predict(fit_bestcv, newx = x_features[train,], type = "response")))
+
+df_pred_train <- df_pred_train %>%
+  mutate(actual_num = as.numeric(actual)-1)
+
+## See confusion matrix
+(CM_trains <- table(df_pred_train %>% 
+        mutate(pred_binary = ifelse(predicted > 0.5,1,0)) %>%
+        select(actual = actual_num, pred = pred_binary)) )
+
+## misclassification error:
+(23+12)/sum(CM_trains)
+
+## test data
+df_pred_test <- data.frame(actual = Carseats_df$High[-train],
+           predicted = as.numeric(predict(fit_bestcv, newx = x_features[-train,], type = "response")))
+
+(CM_test <- table(df_pred_test %>% 
+        mutate(pred_binary = ifelse(predicted > 0.5,1,0),
+               actual = as.numeric(actual)-1) %>%
+        select(actual, pred = pred_binary)) )
+
+## misclassification error:
+(4+5)/sum(CM_test)
+
+```
+
+
+
+

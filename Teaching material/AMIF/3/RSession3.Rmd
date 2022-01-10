@@ -1,0 +1,173 @@
+---
+title: '4329: RSession 3'
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Principal Component Analysis and Factor Models
+
+- Factor Models
+- PCA
+- Statistical Factor Analysis
+
+# Factor models
+
+```{r}
+data = read.csv('https://people.orie.cornell.edu/davidr/SDAFE/data/Stock_FX_Bond.csv')
+# Select the stock or index data (column names that ends with "_AC")
+data = data[grep('_AC', colnames(data))]
+# Convert to ts
+data = as.ts(data)
+# Convert to percent
+data = 100 * (data / lag(data, -1) - 1)
+head(data)
+
+```
+
+Simple factor model with the market (last column in data is SP500 index), and 2 other stocks treated as factors
+
+```{r}
+Mkt = data[, 11]
+factor1 = data[, 9]
+factor2 = data[, 10]
+stocks = data[, 1:5] 
+fit = lm(stocks ~ Mkt + factor1 + factor2)
+coef(fit)
+```
+
+The factor estimated covariance matrix, same notation as the book
+
+- t(): matrix transpose
+- %*%: matrix multiplication
+
+```{r}
+sigma_F = cov(cbind(Mkt, factor1, factor2))
+beta = coef(fit)[-1, ]
+sigma_eps = diag(diag(cov(fit$residuals)), nrow = 5)
+
+cov_R = t(beta) %*% sigma_F %*% beta + sigma_eps
+cov_R
+```
+
+The actual covariance
+
+```{r}
+cov(stocks)
+cor(fit$residuals)
+```
+
+The reason for discrepancy in the covariance (between cov_R and cov(stocks)) is because the factor model assumes zero residual correlation among assets (correlation of $\epsilon_{j,t}$ and $\epsilon_{j',t}$ is zero if $j \neq j'$). When this assumption violated, for example there is 0.46 correlation between $\epsilon_{F,t}$ and $\epsilon_{GM,t}$, there will be difference between cov_R and cov(stocks). 
+
+# PCA
+
+## PCA example1
+
+```{r}
+# Yield data
+data = read.table('https://people.orie.cornell.edu/davidr/SDAFE/data/yields.txt', header = T)[,-11]
+ddata = diff(as.ts(data))
+
+# PCA
+pca = prcomp(ddata, scale. = TRUE)
+# Variance explained
+summary(pca)
+# The loadings (eigenvectors)
+pca$rotation
+```
+
+Linear algebra reminder: two vectors are orthogonal if their dot product is 0
+
+So what should be the result of for example: t(pca$rotation[, 'PC1']) %*% pca$rotation[, 'PC7']...
+
+
+## PCA/factor analysis example 2, recovering the components
+
+Say we have 100 observations of k = 2 hidden factors (Z):
+
+```{r}
+set.seed(111)
+T = 100
+k = 2
+Z = matrix(rnorm(k * T), nrow = T, ncol = k)
+head(Z)
+```
+
+Our observed data has say K = 15 dimensions, but is in fact generated as a linear combination of the 2 latent variables (Z). W[,i] is a function of Z1 and Z2.
+
+Chose a random linear combination (W: 2x15):
+
+```{r}
+W = matrix(sample.int(2 * 15), nrow = 2, ncol = 15)
+W
+```
+
+Our observed data (100x15) is:
+
+```{r}
+data = Z %*% W
+head(data)
+dim(data)
+```
+
+If we run PCA on this we can recover an estimate of the two factors:
+
+```{r}
+pca2 = prcomp(data, scale. = TRUE)
+summary(pca2)
+```
+
+The two first components account for exactly 100% of variation in the data
+
+```{r}
+df = data.frame(factor1 = Z[,1], factor2 = Z[,2],
+               pc1 = pca2$x[, 1], pc2 = pca2$x[, 2])
+```
+
+Since there is no ordering of the factors, from the plot below, we can see that the second principal component looks very close to factor one (first column of Z) and vice versa for the other:
+
+```{r}
+plot.ts(df, nc = 2)
+```
+
+
+# Stepwise regression
+
+```{r}
+data = read.csv('https://www.statlearning.com/s/Credit.csv')[, -1]
+
+```
+
+Predict Rating with the other variabes
+
+```{r}
+head(data)
+```
+
+The formula Rating ~ . regresses Rating on every other variable
+
+## Backward stepwise regression: step
+
+lm(Rating ~ ., data) is the full model, to perform backwise stepwise search like in page 10 of lecture 6 (based on AIC):
+
+```{r}
+step(lm(Rating ~ ., data), direction = 'backward')
+
+```
+
+The best model found according to this procedure is the one that includes: Income, Limit, Cards, Education, Married, and Balance.
+
+
+
+

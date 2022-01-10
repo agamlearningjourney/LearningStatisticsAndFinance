@@ -1,0 +1,64 @@
+---
+title: "PCA on yield curve"
+output: 
+  html_document: 
+    number_sections: yes
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+
+# Some stylized facts
+
+- volatility clustering
+- fat tails
+- high cross-correlation during crisis
+- selection bias of active management
+- anomaly: size, value, asset growth, profitability, momentum, low volatility anomaly
+- leverage effect
+
+See Cont (2001)
+https://www.tandfonline.com/doi/abs/10.1080/713665670
+
+Cochrane
+https://www.johnhcochrane.com/business-35150-advanced-investments
+
+# Some properties
+
+- Assets: S&P500, AAPL, exchange rate IDR
+- Mean, standard deviation, skewness, kurtosis of returns
+- Autocorrelation
+- ...
+
+# Download data
+
+```{r}
+library(tidyquant) # to use getYieldCurve
+library(lubridate)
+library(tidyverse)
+library(quantmod)
+
+# ##### DOWNLOAD data, or ...
+# ## download: S&P500, AAPL, TSLA, KO, PFE
+# df_price <- tq_get(c("EIDO", "^GSPC", "AAPL", "TSLA", "KO", "PFE"),
+#                          get = "stock.prices",
+#                          from = "1982-01-01" )
+# 
+# ## save
+# save(df_price, file = "df_price.RData" )
+# ##### end
+
+##### LOAD SAVED DATA
+load(file = "df_price.RData" )
+##### end
+
+```
+
+# See the prices and returns
+
+# Tail etc.
+
+# Time series model, best fit, ACF

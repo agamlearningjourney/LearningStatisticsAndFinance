@@ -1,0 +1,169 @@
+---
+title: '4329: RSession4a, Regression'
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Statistical learning and model selection
+
+- Lasso
+- Ridge
+
+# LASSO and Ridge
+
+```{r}
+library(MASS)
+# Boston
+data_Boston = Boston
+
+```
+
+
+# Ridge and LASSO
+
+## Ridge regression: glmnet (package glmnet)
+
+with option
+
+- alpha = 0
+
+Does not take a formula argument, can construct x with model.matrix (converts strings/factors to dummies)
+
+```{r}
+# Drop missing observations first
+data_Boston = data_Boston[complete.cases(data_Boston), ]
+# make X matrix
+X = model.matrix(medv ~ ., data_Boston)[, -1] # -1 to remove the intercept, glmnet automatically includes one
+y = data_Boston$medv
+head(X)
+```
+
+Fit ridge with an automatic sequence of  $\lambda$'s (100 by default), the variables are standardized by default (use standardize = FALSE to override)
+
+```{r, message=F, warning=F}
+library(glmnet)
+```
+
+
+```{r}
+ridge = glmnet(X, y, alpha = 0)
+```
+
+Three of the generated  $\lambda$'s, from smallest, the middle, and the largest:
+```{r}
+ridge$lambda[ c(length(ridge$lambda), length(ridge$lambda)/2, 1) ]
+```
+
+The corresponding estimated coefficients for the three  $\lambda$'s
+
+```{r}
+coef(ridge,
+    s = ridge$lambda[ c(length(ridge$lambda), length(ridge$lambda)/2, 1) ])
+
+```
+
+Fit ridge with a given $\lambda$
+
+```{r}
+ridge2 = glmnet(X, y, alpha = 0, lambda = 15.405)
+coef(ridge2)
+
+```
+
+
+## Lasso regression: glmnet (package glmnet)
+
+with option
+
+- alpha = 1
+
+```{r}
+lasso = glmnet(X, y, alpha = 1, lambda = 15.405)
+coef(lasso)
+
+```
+
+
+## Split into train and test sample
+
+```{r}
+train = sample(1:nrow(data_Boston), size = nrow(data_Boston)*70/100)
+lasso_train = glmnet(X[train, ], y[train], alpha = 1, lambda = 15.405)
+
+```
+
+The MSE on the test data
+
+select the test set with -train
+```{r}
+prediction = predict(lasso_train, newx = X[-train, ])
+actual = y[-train]
+
+MSE = mean((prediction - actual)^2)
+MSE
+
+```
+
+## Cross validation: cv.glmnet (package glmnet)
+
+
+Default is 10-fold cross validation
+
+Consider a matrix  M  with  N  columns: for the  N  values of  $\lambda$  glmnet automatically picks (100 is the default) and M values of k-fold. With 10-fold cross validation, this matrix will have 10 rows. For example: row 1, column 1 is the mean square error on fold 1, for  $\lambda_1$.
+
+Now take the column means of this matrix (in words: the average MSE for each $\lambda$  over the 10 folds). The minimum value of this is cvlasso$lambda.min below.
+
+```{r}
+set.seed(101)
+cvlasso = cv.glmnet(x = X[train, ], y = y[train], alpha = 1)
+```
+
+The optimal  $\lambda$ 
+
+(this will change slightly for every time you run the above line, since cv.glmnet chooses the folds randomly, unless we define the foldid)
+
+```{r}
+cvlasso$lambda.min
+```
+
+The coefficients for the $\lambda$ with the smallest MSE
+
+```{r}
+coef(cvlasso, s = 'lambda.min')
+coef(cvlasso) # See coef.cv.glmnet
+```
+
+The test set MSE with this  $\lambda$ :
+
+```{r}
+set.seed(200)
+lasso_train_cv = glmnet(X[train, ], y[train], alpha = 1, lambda = cvlasso$lambda.min)
+mean((predict(lasso_train_cv, newx = X[-train, ]) - y[-train])^2)
+
+coef(lasso_train_cv)
+
+```
+
+cvlasso is a cv.glmnet object, we can plot MSE values for different $\lambda$ values.
+
+```{r}
+plot(cvlasso) 
+
+
+```
+
+
+
+

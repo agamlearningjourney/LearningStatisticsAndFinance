@@ -1,0 +1,329 @@
+---
+title: '4329: RSession1'
+output:
+  html_document:
+    number_sections: yes
+    toc: yes
+  word_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+Here we will cover material from slide Lecture1-2 and some part of Lecture 3 (multivariate time series modeling).
+
+Univariate time series modeling
+
+- AR processes
+- MA processes
+- ARMA processes
+- Forecasting
+
+Long-run relationships in finance and multivariate time series
+
+- Stationarity and Unit-Root Testing
+- Structural breaks
+- Seasonality effects
+- VAR and VARMA models
+
+# Univariate time series modeling
+
+## Simulate data
+
+**Simulate ARMA(1,1)**. $y_t = \phi_0 + \phi_1 y_{t-1} + u_t + \theta_1 u_{t-1}$. Where $u_t \sim WN(0,\sigma^2_u)$ .
+
+```{r}
+set.seed(123) # Will give you the same results as in these examples
+N = 100
+# N = 100000
+epsilon = rnorm(n = N)
+y = vector(length = N)
+y[1] = 5
+for (i in 2:N) {
+    y[i] = 2 +  0.6 * y[i-1] + 0.2 * epsilon[i-1] + epsilon[i]
+}
+
+```
+
+
+```{r}
+plot.ts(y)
+
+```
+
+
+```{r}
+mean(y)
+var(y)
+
+```
+
+## Autocorrelogram (acf, pacf)
+
+```{r}
+acf(y)
+acf(y, lag.max = 10)
+
+```
+
+
+```{r}
+pacf(y)
+
+```
+
+For ARMA model, 
+
+- the ARMA process can alternatively be written both as an infinite-order AR process or an infinite-order MA process
+- The ACF and PACF are not informative in determining the order of an ARMA model
+
+## Ljung-Box test (Box.test)
+
+- $H_0$: no serial correlation in the first K lags. $\rho(1) = \rho(2)=... = \rho(K) = 0$. The series is white noise. 
+- $H_a$: one or more of $\rho(1) = \rho(2)=... = \rho(K) = 0$ is nonzero.
+
+```{r}
+Box.test(y, lag = 5, type = 'Ljung-Box')
+
+```
+
+
+## Estimating time series process
+
+**Estimating AR processes: arima**
+
+- the three integer components (p, d, q) are the AR order, the degree of differencing, and the MA order.
+- fitdf takes into account estimated parameters (degrees of freedom  = n_lags−n_parameters = n_lags-fitdf)
+
+```{r}
+model1 = arima(y, order = c(1, 0, 0))
+model1
+Box.test(residuals(model1), lag = 10, type = 'Ljung-Box', fitdf = 1)
+```
+
+**Estimating MA processes: arima**
+
+- argument: order = (0, 0, "MA lag")
+```{r}
+model2 = arima(y, order = c(0, 0, 1))
+model2
+Box.test(residuals(model2), lag = 10, type = 'Ljung-Box', fitdf = 1)
+
+```
+
+**Estimating ARMA processes: arima**
+
+- argument: order = c(AR, MA)
+
+```{r}
+model3 = arima(y, order = c(1, 0, 1))
+model3
+Box.test(residuals(model3), lag = 10, type = 'Ljung-Box', fitdf = 2)
+
+```
+
+**Model selection of ARMA processes: auto.arima (library forecast)**
+
+- The ARMA(p,q) model that minimizes the AIC
+- The AIC is the same with arima(y, order = c(1, 0, 0))
+
+```{r, message=F, warning=F}
+library(forecast)
+model4 = auto.arima(y, max.p = 5, max.q = 5, d = 0, ic = 'aic')
+model4
+Box.test(residuals(model4), lag = 10, type = 'Ljung-Box', fitdf = 3)
+
+```
+
+Using the BIC
+
+```{r}
+auto.arima(y, max.p = 5, max.q = 5, d = 0, ic = 'bic')
+
+```
+
+**(See what happens when N (in the y simulation at the beginning) is increased ...)**
+
+## Forecast: predict
+
+Refit the ARIMA(1,1) model to the first 90 observations
+
+```{r}
+model5 = arima(y[1:90], order = c(1, 0, 1))
+forecast = predict(model5, n.ahead=10)
+forecast
+```
+
+In a plot, with actual values, forecasts, and 2 standard deviations error bars
+
+```{r}
+plot(y, type='b')
+lines(seq(from = 90, by = 1, length = 10), forecast$pred, col='red') # The forecast
+lines(seq(from = 90, by = 1, length = 10),
+      forecast$pred + 1.96*forecast$se, col='blue')
+lines(seq(from = 90, by = 1, length = 10),
+      forecast$pred - 1.96*forecast$se, col='blue')
+```
+
+
+# Stationarity and unit root testing
+
+**Stationarity and unit root testing: adf.test (package tseries)**
+
+$H_0$: there is a unit root
+
+```{r, message=F, warning=F}
+library(tseries)
+adf.test(y)
+```
+
+Barely significant
+
+**Random walk**
+
+```{r}
+epsilon = rnorm(n = N)
+y2 = vector(length = N)
+y2[1] = 5
+for (i in 2:N) {
+    y2[i] = 0.1 +  y2[i-1] + epsilon[i]
+}
+plot.ts(y2)
+adf.test(y2)
+```
+
+
+```{r}
+plot.ts(diff(y2))
+adf.test(diff(y2))
+
+```
+
+
+# Structural breaks
+
+**Structural breaks: sctest (package strucchange)**
+
+
+```{r}
+y3 = c(1 + 0.4 * 1:50, 3 + 1.5 * 51:100) + rnorm(n = 100)
+plot.ts(y3)
+```
+
+$H_0:$ the parameters are stable over time, in this case, the intercept is stable overtime.
+
+point = potential Structural breaks.
+
+```{r, message=F, warning=F}
+library(strucchange)
+sctest(y3 ~ 1 , type = "Chow", point = 51)
+
+```
+
+
+
+# VAR and VARMA
+
+**VAR and VARMA models: (package vars)**
+
+```{r, message=F, warning=F}
+library(vars)
+data("Canada") # Macro data set for canada
+head(Canada)
+class(Canada)
+plot(Canada, nc = 2)
+plot(diff(Canada), nc = 2)
+
+```
+
+
+
+**Select optimal VAR(p) according to AIC: VARselect**
+
+p = 1 optimal
+
+```{r}
+var1 = VARselect(diff(Canada))
+var1
+```
+
+
+
+**Fit VAR(p): VAR**
+
+```{r}
+var2 = VAR(diff(Canada), p = 1)
+var2
+```
+
+**Impulse response: irf**
+
+- One unit shock to e's impact on the remaining variables.
+- how long and to what degree a shock to a given equation has on all of the variables in the system
+
+```{r}
+# the default is n.ahead = 10
+irf(var2, impulse = "e", response = c("e", "prod", "rw", "U"), boot = FALSE)
+
+```
+
+**Variance decomposition: fevd**
+
+- how much of the s-step ahead forecast error variance for each variable is explained by innovations to each explanatory variable $(s = 1, 2,...)$
+
+```{r}
+fevd(var2)$e
+fevd(var2)$prod
+
+```
+
+**Using R's ar function (with data in ts format):**
+
+```{r}
+# If the data had not already been in a time series format:
+# Canada = as.ts(Canada)
+
+# Selecting columns from ts objects, use [, 'column_name']:
+head(Canada[, 'e'])
+
+# Same as the VAR fitted above
+var_ar = ar(diff(Canada), order.max = 1, method = 'ols')
+var_ar
+
+# get the residuals with ...$resid (not with residuals)
+# residuals(var_ar)
+head(var_ar$resid)
+
+# Omit the first missing row with na.omit (one is missing because the VAR order is one)
+head(na.omit(var_ar$resid))
+
+# Make a prediction from a new observation (that we just set equal to 0.8 times the mean)
+new = var_ar$x.mean * 0.8
+# Convert to a `ts` object
+new_ts = ts(t(data.frame(new)), start = c(2001,1), end = c(2001, 1), frequency = 4)
+# The `Canada` data set's last obervation was = 2000 Q4
+new_ts
+
+predict(var_ar, new_ts, n.ahead = 1, se.fit = FALSE)
+
+# The acf, the plots on the off-diagonal are the cross correlations, the ones on the diagonal are the acf
+acf(na.omit(var_ar$resid))
+
+# The absolute values of the eigenvalues of phi (eigen)
+phi = var_ar$ar[1, , ]
+phi
+
+abs(eigen(phi)$values)
+
+# The covariance matrix of the residuals (cov)
+cov(na.omit(var_ar$resid))
+
+```
+
+

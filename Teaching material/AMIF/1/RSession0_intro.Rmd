@@ -1,0 +1,247 @@
+---
+title: '4329: RSession0, Quick Introduction'
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+# Packages
+
+```{r, message=F, warning=F}
+# Download and install packages 
+# install.packages('dplyr')
+
+# load and attach add-on packages
+library(dplyr)
+# # ?, help operator, access to the documentation pages for R functions, data sets, and other objects
+# ?dplyr
+# # see (the first 10) function within dplyr package
+# ls("package:dplyr")[1:10]
+# ?group_by
+# ?library
+
+```
+
+# Data type
+
+```{r}
+# vector
+vec_num = c(1,2,3,4) #numeric
+class(vec_num)
+vec_num = 1:3 #integer
+class(vec_num)
+vec_char = c("a","b","c") # character
+class(vec_char)
+
+# matrix
+matrix_a = matrix(1:9, nrow = 3, ncol = 3, byrow = TRUE) 
+class(matrix_a)
+
+# data frame
+df_a = data.frame(id = c(111,222,333), age = c(20,30,40))
+View(df_a)
+class(df_a)
+
+# list
+list_a = list(vec_num = vec_num, vec_char, matrix_a, df_a)
+View(list_a)
+class(list_a)
+list_a$vec_num
+list_a[[1]] # member reference
+list_a[1] # list slice
+```
+
+Small note: why subset with list_a[[1]] instead of list_a[1]? It does not matter in this example, but the difference may be important in other settings, see the [R Inferno] page 72, section 8.1.54 list subscripting
+
+
+# Code Snippets
+
+Used for quickly inserting common snippets of code, for example:
+
+- fun (function)
+- mat (matrix)
+- if, el, and ei (conditional expressions)
+- for (for loop)
+
+```{r}
+# code snippets example: typing for, then press tab
+# for (variable in vector) {
+#   
+# }
+
+```
+
+
+# Load and save
+
+```{r}
+# check current working directory
+# getwd()
+
+# set working directory using the following function
+# setwd(dir) # e.g. C:/Users/...
+
+# Load the Monthly and Quarterly Databases for Macroeconomic Research from the Federal Reserve
+# download data from web
+data = read.csv('https://files.stlouisfed.org/files/htdocs/fred-databases/monthly/current.csv')
+
+# save data to RData format
+save(data, file = "data.RData")
+
+# save data to csv format
+write.csv(data, file = "data.csv")
+
+# remove the data
+rm(data)
+
+# Sometimes, the data is given in RData format
+# note: if the data and the code are not in the same directory, we need to specify the specific directory for the data 
+load("data.RData")
+
+```
+
+# Working through an example
+
+**Check and prepare the data**.
+
+```{r}
+class(data)
+head(data)
+tail(data)
+colnames(data)[1:10]
+nrow(data)
+
+# The first and last row are useless, drop it using subsetting
+# also just keep the first 10 columns/variables
+data = data[-c(1,712), 1:10]
+# Same as
+# data <- data = data[-c(1,712), 1:10]
+# Note: the two assignment operators (= and <-) are equivalent (except when used in a function call)
+head(data)
+
+# Convert the date string column to a date variable
+data$sasdate = as.Date(data$sasdate, '%m/%d/%Y')
+head(data)
+
+# Plot one of the series
+# again, choose a subset ([...]), but with a vector (c(...))
+plot(data[c('sasdate', 'RPI')])
+
+```
+
+
+**Regression and lapply**
+
+```{r}
+# Regress RPI on the W875RX1 series( 3rd column)
+reg = lm(RPI ~ W875RX1, data)
+summary(reg)
+
+# An object of class "lm" is a list 
+class(reg)
+class(summary(reg))
+# check the element of reg
+names(reg)
+# View(reg)
+
+# extract the coefficients
+coef(reg)
+reg$coefficients
+summary(reg)$coefficients
+
+# extract the first 10 residuals
+resid(reg)[1:10]
+reg$residuals[1:10]
+summary(reg)$residuals[1:10]
+
+# Regress RPI on all of the colums, and look at the R square
+variables = colnames(data)[-(1:2)]
+variables
+
+# use lapply to apply a function to all these variable names
+# lapply applies a function to every element in a list/vector, and returns a list
+# using anonymous function
+regressions = lapply(variables,
+                     function(x) lm(as.formula(paste('RPI ~ ', x)), data))
+
+# The first element is of course the same as above:
+regressions[[1]] 
+regressions[1] 
+
+# The R squares
+rsquares = lapply(regressions, function(x) summary(x)$r.squared)
+rsquares
+
+# In a more readable output
+cbind(Rsq = rsquares, name = variables)
+
+```
+
+**Regression and for loop**
+
+```{r}
+rsquares = matrix(0, nrow = 8)
+i = 1
+
+for (name in variables) {
+    reg = lm(as.formula(paste('RPI ~ ', name)), data)
+    rsquares[i] = summary(reg)$r.squared
+    i = i + 1
+}
+
+# Yet another way
+rsquares_another = list()
+
+for (name in variables) {
+    reg = lm(as.formula(paste('RPI ~ ', name)), data)
+    rsquares_another[[name]] = summary(reg)$r.squared
+}
+
+rsquares
+
+unlist(rsquares_another)
+
+```
+
+Since we converted the date column to a date variable, we can subset with R's "date arithmetic", to pick rows after January 2000:
+
+```{r}
+head(data[data$sasdate > '2000-1-1', ])
+
+```
+
+
+# Other resources
+
+Help sites:
+
+- [Stackoverflow]
+- [Stats stack exchange] 
+
+An alternative to typset your homework:
+
+- [RMarkdown and knitr]
+
+Free books:
+
+- [The Art of R Programming]
+- [R for Data Science] (More "modern"/add-ons aspects of R)
+
+Misc:
+
+- [Google R Style Guide]
+
+
+
+[R Inferno]: https://www.burns-stat.com/pages/Tutor/R_inferno.pdf
+[Stackoverflow]: https://stackoverflow.com/questions
+[Stats stack exchange]: https://stats.stackexchange.com/
+[RMarkdown and knitr]: https://rmarkdown.rstudio.com/articles_intro.html
+[The Art of R Programming]: http://heather.cs.ucdavis.edu/~matloff/132/NSPpart.pdf
+[R for Data Science]: https://r4ds.had.co.nz/
+[Google R Style Guide]: https://google.github.io/styleguide/Rguide.html
